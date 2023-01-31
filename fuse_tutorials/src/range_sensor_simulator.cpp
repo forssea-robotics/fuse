@@ -123,7 +123,7 @@ std::vector<Beacon> createNoisyBeacons(const std::vector<Beacon> & beacons)
  */
 sensor_msgs::msg::PointCloud2::SharedPtr beaconsToPointcloud(
   const std::vector<Beacon> & beacons,
-  const rclcpp::Clock & clock)
+  rclcpp::Clock & clock)
 {
   auto msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
   msg->header.stamp = clock.now();
@@ -225,7 +225,8 @@ void initializeStateEstimation(
     interfaces.get_node_graph_interface(),
     interfaces.get_node_services_interface(),
     "/state_estimation/set_pose",
-    rclcpp::ServicesQoS()
+    rmw_qos_profile_services_default,
+    nullptr
   );
 
   while (!client->wait_for_service(std::chrono::seconds(30)) &&

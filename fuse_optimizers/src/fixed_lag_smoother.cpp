@@ -118,7 +118,7 @@ FixedLagSmoother::FixedLagSmoother(
       std::placeholders::_1,
       std::placeholders::_2
     ),
-    rclcpp::ServicesQoS(),
+    rmw_qos_profile_services_default,
     interfaces_.get_node_base_interface()->get_default_callback_group()
   );
 }

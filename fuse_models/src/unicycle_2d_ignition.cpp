@@ -100,7 +100,7 @@ void Unicycle2DIgnition::onInit()
       interfaces_.get_node_graph_interface(),
       interfaces_.get_node_services_interface(),
       params_.reset_service,
-      rclcpp::ServicesQoS(),
+      rmw_qos_profile_services_default,
       cb_group_
     );
   }
@@ -125,7 +125,7 @@ void Unicycle2DIgnition::onInit()
     std::bind(
       &Unicycle2DIgnition::setPoseServiceCallback, this, std::placeholders::_1,
       std::placeholders::_2, std::placeholders::_3),
-    rclcpp::ServicesQoS(),
+    rmw_qos_profile_services_default,
     cb_group_
   );
   set_pose_deprecated_service_ = rclcpp::create_service<fuse_msgs::srv::SetPoseDeprecated>(
@@ -137,7 +137,7 @@ void Unicycle2DIgnition::onInit()
     std::bind(
       &Unicycle2DIgnition::setPoseDeprecatedServiceCallback, this, std::placeholders::_1,
       std::placeholders::_2, std::placeholders::_3),
-    rclcpp::ServicesQoS(),
+    rmw_qos_profile_services_default,
     cb_group_
   );
 }

@@ -48,6 +48,7 @@
 #include <fuse_graphs/hash_graph.hpp>
 #include <fuse_optimizers/optimizer.hpp>
 #include <rclcpp/time.hpp>
+#include <rclcpp/contexts/default_context.hpp>
 
 namespace fuse_optimizers
 {
@@ -91,7 +92,7 @@ Optimizer::Optimizer(
   diagnostic_updater_.setHardwareID("fuse");
 
   // Wait for a valid time before loading any of the plugins
-  clock_->wait_until_started();
+  clock_->sleep_until(rclcpp::Time(0, 1, clock_->get_clock_type()), rclcpp::contexts::get_global_default_context());
 
   // Load all configured plugins
   loadMotionModels();
@@ -492,9 +493,12 @@ void Optimizer::stopPlugins()
 
 void Optimizer::setDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & status)
 {
-  if (!clock_->started()) {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Waiting for valid ROS time");
-    return;
+  rcl_time_point_value_t query_now;
+  if (rcl_clock_get_now(clock_->get_clock_handle(), &query_now) == RCL_RET_OK) {
+    if (query_now <= 0) {
+      status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Waiting for valid ROS time");
+      return;
+    }
   }
 
   // TODO(BrettRD): test for previous convergence success or failure

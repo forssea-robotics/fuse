@@ -1266,6 +1266,38 @@ inline void scaleProcessNoiseCovariance(
     velocity * process_noise_covariance.topLeftCorner<3, 3>() * velocity.transpose();
 }
 
+inline void scaleProcessNoiseCovariance(
+    fuse_core::Matrix15d & process_noise_covariance,
+    const Eigen::Vector3d & velocity_linear,
+    const Eigen::Vector3d & velocity_angular,
+    const Eigen::Vector3d & velocity_linear_norm_min,
+    const Eigen::Vector3d & velocity_angular_norm_min)
+{
+  // A more principled approach would be to get the current velocity from the state, make a diagonal
+  // matrix from it, and then rotate it to be in the world frame (i.e., the same frame as the pose
+  // data). We could then use this rotated velocity matrix to scale the process noise covariance for
+  // the pose variables as rotatedVelocityMatrix * poseCovariance * rotatedVelocityMatrix' However,
+  // this presents trouble for robots that may incur rotational error as a result of linear motion
+  // (and vice-versa). Instead, we create a diagonal matrix whose diagonal values are the vector
+  // norm of the state's velocity. We use that to scale the process noise covariance.
+  //
+  // The comment above has been taken from:
+  // https://github.com/cra-ros-pkg/robot_localization/blob/melodic-
+  // devel/src/filter_base.cpp#L138-L144
+  //
+  // We also need to make sure the norm is not zero, because otherwise the resulting process noise
+  // covariance for the pose becomes zero and we get NaN when we compute the inverse to obtain the
+  // information
+  fuse_core::Matrix6d velocity;
+  velocity.setIdentity();
+  velocity.diagonal().head<3>() = velocity_linear_norm_min.cwiseMax(velocity_linear);
+  velocity.diagonal().tail<3>() = velocity_angular_norm_min.cwiseMax
+                               (velocity_angular);
+
+  process_noise_covariance.topLeftCorner<6, 6>() =
+      velocity * process_noise_covariance.topLeftCorner<6, 6>() * velocity.transpose();
+}
+
 }  // namespace common
 
 }  // namespace fuse_models

@@ -169,13 +169,6 @@ inline std::string AbsoluteConstraint<fuse_variables::Orientation2DStamped>::typ
 }
 
 template<>
-inline std::string AbsoluteConstraint<fuse_variables::Orientation3DStamped
-                                      >::type() const
-{
-  return "fuse_constraints::AbsoluteOrientation3DStampedConstraint";
-}
-
-template<>
 inline std::string AbsoluteConstraint<fuse_variables::Position2DStamped>::type() const
 {
   return "fuse_constraints::AbsolutePosition2DStampedConstraint";

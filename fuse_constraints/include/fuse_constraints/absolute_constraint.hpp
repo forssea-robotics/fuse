@@ -49,7 +49,6 @@
 #include <fuse_variables/acceleration_linear_2d_stamped.hpp>
 #include <fuse_variables/acceleration_linear_3d_stamped.hpp>
 #include <fuse_variables/orientation_2d_stamped.hpp>
-#include <fuse_variables/orientation_3d_stamped.hpp>
 #include <fuse_variables/position_2d_stamped.hpp>
 #include <fuse_variables/position_3d_stamped.hpp>
 #include <fuse_variables/velocity_angular_2d_stamped.hpp>
@@ -206,8 +205,6 @@ using AbsoluteAccelerationLinear3DStampedConstraint =
   AbsoluteConstraint<fuse_variables::AccelerationLinear3DStamped>;
 using AbsoluteOrientation2DStampedConstraint =
   AbsoluteConstraint<fuse_variables::Orientation2DStamped>;
-using AbsoluteOrientation3DStampedConstraint =
-  AbsoluteConstraint<fuse_variables::Orientation3DStamped>;
 using AbsolutePosition2DStampedConstraint = AbsoluteConstraint<fuse_variables::Position2DStamped>;
 using AbsolutePosition3DStampedConstraint = AbsoluteConstraint<fuse_variables::Position3DStamped>;
 using AbsoluteVelocityAngular2DStampedConstraint =
@@ -227,7 +224,6 @@ BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsoluteAccelerationAngular2DStampedCon
 BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsoluteAccelerationLinear2DStampedConstraint);
 BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsoluteAccelerationLinear3DStampedConstraint);
 BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsoluteOrientation2DStampedConstraint);
-BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsoluteOrientation3DStampedConstraint);
 BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsolutePosition2DStampedConstraint);
 BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsolutePosition3DStampedConstraint);
 BOOST_CLASS_EXPORT_KEY(fuse_constraints::AbsoluteVelocityAngular2DStampedConstraint);

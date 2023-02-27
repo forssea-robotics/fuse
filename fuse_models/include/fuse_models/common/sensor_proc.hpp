@@ -972,7 +972,7 @@ inline bool processDifferentialPoseWithTwistCovariance(
  * @param[out] transaction - The generated variables and constraints are added to this transaction
  * @return true if any constraints were added, false otherwise
  */
-inline bool processTwistWithCovariance(
+inline bool processTwist2DWithCovariance(
   const std::string & source,
   const fuse_core::UUID & device_id,
   const geometry_msgs::msg::TwistWithCovarianceStamped & twist,
@@ -1112,6 +1112,249 @@ inline bool processTwistWithCovariance(
   }
 
   return constraints_added;
+}
+
+/**
+ * @brief Extracts velocity data from a TwistWithCovarianceStamped and adds that data to a fuse
+ *        Transaction
+ *
+ * This method effectively adds two variables (2D linear velocity and 2D angular velocity) and their
+ * respective constraints to the given \p transaction. The velocity data is extracted from the \p
+ * twist message. Only 2D data is used. The data will be automatically transformed into the \p
+ * target_frame before it is used.
+ *
+ * @param[in] source - The name of the sensor or motion model that generated this constraint
+ * @param[in] device_id - The UUID of the machine
+ * @param[in] twist - The TwistWithCovarianceStamped message from which we will extract the twist
+ *                    data
+ * @param[in] linear_velocity_loss - The loss function for the 2D linear velocity constraint
+ *                                   generated
+ * @param[in] angular_velocity_loss - The loss function for the 2D angular velocity constraint
+ *                                    generated
+ * @param[in] target_frame - The frame ID into which the twist data will be transformed before it is
+ *                           used
+ * @param[in] tf_buffer - The transform buffer with which we will lookup the required transform
+ * @param[in] validate - Whether to validate the measurements or not. If the validation fails no
+ *                       constraint is added
+ * @param[out] transaction - The generated variables and constraints are added to this transaction
+ * @return true if any constraints were added, false otherwise
+ */
+inline bool processTwist3DWithCovariance(
+    const std::string & source,
+    const fuse_core::UUID & device_id,
+    const geometry_msgs::msg::TwistWithCovarianceStamped & twist,
+    const fuse_core::Loss::SharedPtr & linear_velocity_loss,
+    const fuse_core::Loss::SharedPtr & angular_velocity_loss,
+    const std::string & target_frame,
+    const std::vector<size_t> & linear_indices,
+    const std::vector<size_t> & angular_indices,
+    const tf2_ros::Buffer & tf_buffer,
+    const bool validate,
+    fuse_core::Transaction & transaction,
+    const rclcpp::Duration & tf_timeout = rclcpp::Duration(0, 0))
+{
+  // Make sure we actually have work to do
+  if (linear_indices.empty() && angular_indices.empty()) {
+    return false;
+  }
+
+  geometry_msgs::msg::TwistWithCovarianceStamped transformed_message;
+  if (target_frame.empty()) {
+    transformed_message = twist;
+  } else {
+    transformed_message.header.frame_id = target_frame;
+
+    if (!transformMessage(tf_buffer, twist, transformed_message, tf_timeout)) {
+      RCLCPP_WARN_STREAM_SKIPFIRST_THROTTLE(
+          rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0 * 1000,
+          "Failed to transform twist message with stamp " << rclcpp::Time(
+                                                                 twist.header.stamp).nanoseconds() << ". Cannot create constraint.");
+      return false;
+    }
+  }
+
+  bool constraints_added = false;
+
+  // Create two absolute constraints
+  if (!linear_indices.empty()) {
+    auto velocity_linear =
+        fuse_variables::VelocityLinear3DStamped::make_shared(twist.header
+                                                                 .stamp, device_id);
+    velocity_linear->x() = transformed_message.twist.twist.linear.x;
+    velocity_linear->y() = transformed_message.twist.twist.linear.y;
+    velocity_linear->z() = transformed_message.twist.twist.linear.z;
+
+    // Create the mean twist vectors for the constraints
+    fuse_core::Vector3d linear_vel_mean;
+    linear_vel_mean << transformed_message.twist.twist.linear.x,
+        transformed_message.twist.twist.linear.y,
+        transformed_message.twist.twist.linear.z;
+
+    // Create the covariances for the constraints
+    fuse_core::Matrix3d linear_vel_covariance;
+    linear_vel_covariance <<
+        transformed_message.twist.covariance[0],
+        transformed_message.twist.covariance[1],
+        transformed_message.twist.covariance[2],
+        transformed_message.twist.covariance[6],
+        transformed_message.twist.covariance[7],
+        transformed_message.twist.covariance[8],
+        transformed_message.twist.covariance[12],
+        transformed_message.twist.covariance[13],
+        transformed_message.twist.covariance[14];
+
+    // Build the sub-vector and sub-matrices based on the requested indices
+    fuse_core::VectorXd linear_vel_mean_partial(linear_indices.size());
+    fuse_core::MatrixXd linear_vel_covariance_partial(linear_vel_mean_partial.rows(),
+                                                      linear_vel_mean_partial.rows());
+
+    populatePartialMeasurement(
+        linear_vel_mean,
+        linear_vel_covariance,
+        linear_indices,
+        linear_vel_mean_partial,
+        linear_vel_covariance_partial);
+
+    bool add_constraint = true;
+
+    if (validate) {
+      try {
+        validatePartialMeasurement(linear_vel_mean_partial, linear_vel_covariance_partial);
+      } catch (const std::runtime_error & ex) {
+        RCLCPP_ERROR_STREAM_THROTTLE(
+            rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0 * 1000,
+            "Invalid partial linear velocity measurement from '"
+                << source << "' source: " << ex.what());
+        add_constraint = false;
+      }
+    }
+
+    if (add_constraint) {
+      auto linear_vel_constraint =
+          fuse_constraints::AbsoluteVelocityLinear3DStampedConstraint
+          ::make_shared(source, *velocity_linear, linear_vel_mean_partial,
+                        linear_vel_covariance_partial, linear_indices);
+
+      linear_vel_constraint->loss(linear_velocity_loss);
+
+      transaction.addVariable(velocity_linear);
+      transaction.addConstraint(linear_vel_constraint);
+      constraints_added = true;
+    }
+  }
+
+  if (!angular_indices.empty()) {
+    // Create the twist variables
+    auto velocity_angular =
+        fuse_variables::VelocityAngular3DStamped::make_shared(twist.header
+                                                                  .stamp, device_id);
+    velocity_angular->roll() = transformed_message.twist.twist.angular.x;
+    velocity_angular->pitch() = transformed_message.twist.twist.angular.y;
+    velocity_angular->yaw() = transformed_message.twist.twist.angular.z;
+
+    fuse_core::Vector3d angular_vel_vector;
+    angular_vel_vector << transformed_message.twist.twist.angular.x,
+    transformed_message.twist.twist.angular.y,
+    transformed_message.twist.twist.angular.z;
+
+    fuse_core::Matrix3d angular_vel_covariance;
+    angular_vel_covariance << transformed_message.twist.covariance[21],
+        transformed_message.twist.covariance[22],
+        transformed_message.twist.covariance[23],
+        transformed_message.twist.covariance[27],
+        transformed_message.twist.covariance[28],
+        transformed_message.twist.covariance[29],
+        transformed_message.twist.covariance[33],
+        transformed_message.twist.covariance[34],
+        transformed_message.twist.covariance[35];
+
+    bool add_constraint = true;
+
+    if (validate) {
+      try {
+        validatePartialMeasurement(angular_vel_vector, angular_vel_covariance);
+      } catch (const std::runtime_error & ex) {
+        RCLCPP_ERROR_STREAM_THROTTLE(
+            rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0,
+            "Invalid partial angular velocity measurement from '"
+                << source << "' source: " << ex.what());
+        add_constraint = false;
+      }
+    }
+
+    if (add_constraint) {
+      auto angular_vel_constraint =
+          fuse_constraints::AbsoluteVelocityAngular3DStampedConstraint
+          ::make_shared(source, *velocity_angular, angular_vel_vector,
+                        angular_vel_covariance, angular_indices);
+
+      angular_vel_constraint->loss(angular_velocity_loss);
+
+      transaction.addVariable(velocity_angular);
+      transaction.addConstraint(angular_vel_constraint);
+      constraints_added = true;
+    }
+  }
+
+  if (constraints_added) {
+    transaction.addInvolvedStamp(twist.header.stamp);
+  }
+
+  return constraints_added;
+}
+
+/**
+ * @brief Extracts velocity data from a TwistWithCovarianceStamped and adds that data to a fuse
+ *        Transaction
+ *
+ * This method effectively adds two variables (2D linear velocity and 2D angular velocity) and their
+ * respective constraints to the given \p transaction. The velocity data is extracted from the \p
+ * twist message. Only 2D data is used. The data will be automatically transformed into the \p
+ * target_frame before it is used.
+ *
+ * @param[in] source - The name of the sensor or motion model that generated this constraint
+ * @param[in] device_id - The UUID of the machine
+ * @param[in] twist - The TwistWithCovarianceStamped message from which we will extract the twist
+ *                    data
+ * @param[in] linear_velocity_loss - The loss function for the 2D linear velocity constraint
+ *                                   generated
+ * @param[in] angular_velocity_loss - The loss function for the 2D angular velocity constraint
+ *                                    generated
+ * @param[in] target_frame - The frame ID into which the twist data will be transformed before it is
+ *                           used
+ * @param[in] tf_buffer - The transform buffer with which we will lookup the required transform
+ * @param[in] validate - Whether to validate the measurements or not. If the validation fails no
+ *                       constraint is added
+ * @param[out] transaction - The generated variables and constraints are added to this transaction
+ * @return true if any constraints were added, false otherwise
+ */
+inline bool processTwistWithCovariance(
+    const std::string & source,
+    const fuse_core::UUID & device_id,
+    const geometry_msgs::msg::TwistWithCovarianceStamped & twist,
+    const fuse_core::Loss::SharedPtr & linear_velocity_loss,
+    const fuse_core::Loss::SharedPtr & angular_velocity_loss,
+    const std::string & target_frame,
+    const std::vector<size_t> & linear_indices,
+    const std::vector<size_t> & angular_indices,
+    const tf2_ros::Buffer & tf_buffer,
+    const bool validate,
+    fuse_core::Transaction & transaction,
+    const rclcpp::Duration & tf_timeout = rclcpp::Duration(0, 0))
+{
+  return processTwist2DWithCovariance(
+      source,
+      device_id,
+      twist,
+      linear_velocity_loss,
+      angular_velocity_loss,
+      target_frame,
+      linear_indices,
+      angular_indices,
+      tf_buffer,
+      validate,
+      transaction,
+      tf_timeout);
 }
 
 /**

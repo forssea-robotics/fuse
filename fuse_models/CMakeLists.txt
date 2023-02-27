@@ -48,6 +48,7 @@ add_library(${PROJECT_NAME}
   src/pose_2d.cpp
   src/transaction.cpp
   src/twist_2d.cpp
+  src/twist_3d.cpp
   src/unicycle_2d.cpp
   src/unicycle_2d_ignition.cpp
   src/unicycle_2d_state_kinematic_constraint.cpp

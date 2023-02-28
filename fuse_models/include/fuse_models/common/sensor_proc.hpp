@@ -1328,6 +1328,7 @@ inline bool processTwist3DWithCovariance(
  * @param[out] transaction - The generated variables and constraints are added to this transaction
  * @return true if any constraints were added, false otherwise
  */
+[[deprecated("This method was renamed. please use processTwist2DWithCovariance instead")]]
 inline bool processTwistWithCovariance(
     const std::string & source,
     const fuse_core::UUID & device_id,

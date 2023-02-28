@@ -138,11 +138,11 @@ public:
         use_twist_covariance);
 
       minimum_pose_relative_covariance =
-        fuse_core::getCovarianceDiagonalParam<3>(
+        fuse_core::getCovarianceDiagonalParam<6>(
         interfaces,
         fuse_core::joinParameterName(ns, "minimum_pose_relative_covariance_diagonal"), 0.0);
       twist_covariance_offset =
-        fuse_core::getCovarianceDiagonalParam<3>(
+        fuse_core::getCovarianceDiagonalParam<6>(
         interfaces,
         fuse_core::joinParameterName(ns, "twist_covariance_offset_diagonal"), 0.0);
     }
@@ -183,9 +183,9 @@ public:
   bool disable_checks {false};
   bool independent {true};
   bool use_twist_covariance {true};
-  fuse_core::Matrix3d minimum_pose_relative_covariance;  //!< Minimum pose relative covariance
+  fuse_core::Matrix6d minimum_pose_relative_covariance;  //!< Minimum pose relative covariance
                                                          //!< matrix
-  fuse_core::Matrix3d twist_covariance_offset;    //!< Offset already added to the twist covariance
+  fuse_core::Matrix6d twist_covariance_offset;    //!< Offset already added to the twist covariance
                                                   //!< matrix, that will be substracted in order to
                                                   //!< recover the raw values
   bool remove_gravitational_acceleration {false};

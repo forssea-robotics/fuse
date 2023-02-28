@@ -47,6 +47,7 @@
 
 #include <fuse_constraints/absolute_pose_2d_stamped_constraint.hpp>
 #include <fuse_constraints/relative_pose_2d_stamped_constraint.hpp>
+#include <fuse_constraints/relative_pose_3d_stamped_constraint.hpp>
 #include <fuse_constraints/absolute_constraint.hpp>
 #include <fuse_constraints/absolute_orientation_3d_stamped_constraint.hpp>
 #include <fuse_core/eigen.hpp>
@@ -886,7 +887,7 @@ inline bool processDifferentialPoseWithCovariance(
  * @param[out] transaction - The generated variables and constraints are added to this transaction
  * @return true if any constraints were added, false otherwise
  */
-inline bool processDifferentialPoseWithTwistCovariance(
+inline bool processDifferentialPose2DWithTwistCovariance(
   const std::string & source,
   const fuse_core::UUID & device_id,
   const geometry_msgs::msg::PoseWithCovarianceStamped & pose1,
@@ -1037,6 +1038,221 @@ inline bool processDifferentialPoseWithTwistCovariance(
     pose_relative_covariance_partial,
     position_indices,
     orientation_indices);
+
+  constraint->loss(loss);
+
+  transaction.addVariable(position1);
+  transaction.addVariable(orientation1);
+  transaction.addVariable(position2);
+  transaction.addVariable(orientation2);
+  transaction.addConstraint(constraint);
+  transaction.addInvolvedStamp(pose1.header.stamp);
+  transaction.addInvolvedStamp(pose2.header.stamp);
+
+  return true;
+}
+
+[[deprecated("this method was renamed to processDifferentialPose2DWithTwistCovariance")]]
+inline bool processDifferentialPoseWithTwistCovariance(
+    const std::string & source,
+    const fuse_core::UUID & device_id,
+    const geometry_msgs::msg::PoseWithCovarianceStamped & pose1,
+    const geometry_msgs::msg::PoseWithCovarianceStamped & pose2,
+    const geometry_msgs::msg::TwistWithCovarianceStamped & twist,
+    const fuse_core::Matrix3d & minimum_pose_relative_covariance,
+    const fuse_core::Matrix3d & twist_covariance_offset,
+    const fuse_core::Loss::SharedPtr & loss,
+    const std::vector<size_t> & position_indices,
+    const std::vector<size_t> & orientation_indices,
+    const bool validate,
+    fuse_core::Transaction & transaction)
+{
+  return processDifferentialPose2DWithTwistCovariance(
+      source, device_id, pose1, pose2, twist, minimum_pose_relative_covariance,
+      twist_covariance_offset, loss, position_indices, orientation_indices,
+      validate, transaction);
+}
+
+/**
+ * @brief Extracts relative 3D pose data from a PoseWithCovarianceStamped and adds that data to a
+ *        fuse Transaction
+ *
+ * This method computes the delta between two poses and creates the required fuse variables and
+ * constraints, and then adds them to the given \p transaction. Full 3D data is used. The pose delta
+ * is calculated as
+ *
+ * pose_relative = pose_absolute1^-1 * pose_absolute2
+ *
+ * Additionally, the twist covariance of the last message is used to compute the relative pose
+ * covariance using the time difference between the pose_absolute2 and pose_absolute1 time stamps.
+ * This assumes the pose measurements are dependent. A small minimum relative covariance is added to
+ * avoid getting a zero or ill-conditioned covariance. This could happen if the twist covariance is
+ * very small, e.g. when the twist is zero.
+ *
+ * @param[in] source - The name of the sensor or motion model that generated this constraint
+ * @param[in] device_id - The UUID of the machine
+ * @param[in] pose1 - The first (and temporally earlier) PoseWithCovarianceStamped message
+ * @param[in] pose2 - The second (and temporally later) PoseWithCovarianceStamped message
+ * @param[in] twist - The second (and temporally later) TwistWithCovarianceStamped message
+ * @param[in] minimum_pose_relative_covariance - The minimum pose relative covariance that is always
+ *                                               added to the resulting pose relative covariance
+ * @param[in] twist_covariance_offset - The twist covariance offset that was added to the twist
+ *                                      covariance and must be substracted from it before computing
+ *                                      the pose relative covariance from it
+ * @param[in] loss - The loss function for the 3D pose constraint generated
+ * @param[in] validate - Whether to validate the measurements or not. If the validation fails no
+ *                       constraint is added
+ * @param[out] transaction - The generated variables and constraints are added to this transaction
+ * @return true if any constraints were added, false otherwise
+ */
+inline bool processDifferentialPose3DWithTwistCovariance(
+    const std::string & source,
+    const fuse_core::UUID & device_id,
+    const geometry_msgs::msg::PoseWithCovarianceStamped & pose1,
+    const geometry_msgs::msg::PoseWithCovarianceStamped & pose2,
+    const geometry_msgs::msg::TwistWithCovarianceStamped & twist,
+    const fuse_core::Matrix6d & minimum_pose_relative_covariance,
+    const fuse_core::Matrix6d & twist_covariance_offset,
+    const fuse_core::Loss::SharedPtr & loss,
+    const bool validate,
+    fuse_core::Transaction & transaction)
+{
+  // Convert the poses into tf2 transforms
+  tf2::Transform pose1_3d;
+  tf2::fromMsg(pose1.pose.pose, pose1_3d);
+
+  tf2::Transform pose2_3d;
+  tf2::fromMsg(pose2.pose.pose, pose2_3d);
+
+  // Create the pose variables
+  auto position1 = fuse_variables::Position3DStamped::make_shared(pose1.header.stamp, device_id);
+  auto orientation1 =
+      fuse_variables::Orientation3DStamped::make_shared(pose1.header.stamp, device_id);
+  position1->x() = pose1_3d.getOrigin().x();
+  position1->y() = pose1_3d.getOrigin().y();
+  position1->z() = pose1_3d.getOrigin().z();
+  orientation1->w() = pose1_3d.getRotation().w();
+  orientation1->x() = pose1_3d.getRotation().x();
+  orientation1->y() = pose1_3d.getRotation().y();
+  orientation1->z() = pose1_3d.getRotation().z();
+
+  auto position2 = fuse_variables::Position3DStamped::make_shared(pose2.header.stamp, device_id);
+  auto orientation2 = fuse_variables::Orientation3DStamped::make_shared(
+      pose2.header.stamp,
+      device_id);
+  position2->x() = pose2_3d.getOrigin().x();
+  position2->y() = pose2_3d.getOrigin().y();
+  position2->z() = pose2_3d.getOrigin().z();
+  orientation2->w() = pose2_3d.getRotation().w();
+  orientation2->x() = pose2_3d.getRotation().x();
+  orientation2->y() = pose2_3d.getRotation().y();
+  orientation2->z() = pose2_3d.getRotation().z();
+
+  // Create the delta for the constraint
+  const auto delta = pose1_3d.inverseTimes(pose2_3d);
+  fuse_core::Vector7d pose_relative_mean;
+  pose_relative_mean <<
+      delta.getOrigin().x(),
+      delta.getOrigin().y(),
+      delta.getOrigin().z(),
+      delta.getRotation().w(),
+      delta.getRotation().x(),
+      delta.getRotation().y(),
+      delta.getRotation().z();
+
+  // Create the covariance components for the constraint
+  fuse_core::Matrix6d cov(twist.twist.covariance.data());
+
+  // For dependent pose measurements p1 and p2, we assume they're computed as:
+  //
+  // p2 = p1 * p12    [1]
+  //
+  // where p12 is the relative pose between p1 and p2, which is computed here as:
+  //
+  // p12 = p1^-1 * p2
+  //
+  // Note that the twist t12 is computed as:
+  //
+  // t12 = p12 / dt
+  //
+  // where dt = t2 - t1, for t1 and t2 being the p1 and p2 timestamps, respectively.
+  //
+  // Therefore, the relative pose p12 is computed as follows given the twist t12:
+  //
+  // p12 = t12 * dt
+  //
+  // The covariance propagation of this equation is:
+  //
+  // C12 = J_t12 * T12 * J_t12^T    [2]
+  //
+  // where T12 is the twist covariance and J_t12 is the jacobian of the equation wrt to t12.
+  //
+  // The jacobian wrt t12 is:
+  //
+  // J_t12 = dt * Id
+  //
+  // where Id is a 3x3 Identity matrix.
+  //
+  // In some cases the twist covariance T12 is very small and it could yield to an ill-conditioned
+  // C12 covariance. For that reason a minimum covariance is added to [2].
+  //
+  // It is also common that for the same reason, the twist covariance T12 already has a minimum
+  // covariance offset added to it by the publisher, so we have to remove it before using it.
+  const auto dt = (rclcpp::Time(pose2.header.stamp) - rclcpp::Time(pose1.header.stamp)).seconds();
+
+  if (dt < 1e-6) {
+    RCLCPP_ERROR_STREAM_THROTTLE(
+        rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0 * 1000,
+        "Very small time difference " << dt << "s from '" << source << "' source.");
+    return false;
+  }
+
+  fuse_core::Matrix6d j_twist;
+  j_twist.setIdentity();
+  j_twist *= dt;
+
+  fuse_core::Matrix6d pose_relative_covariance =
+      j_twist * (cov - twist_covariance_offset) * j_twist.transpose() +
+          minimum_pose_relative_covariance;
+
+  //// Build the sub-vector and sub-matrices based on the requested indices
+  //fuse_core::VectorXd pose_relative_mean_partial(
+  //    position_indices.size() + orientation_indices.size());
+  //fuse_core::MatrixXd pose_relative_covariance_partial(pose_relative_mean_partial.rows(),
+  //                                                     pose_relative_mean_partial.rows());
+  //
+  //const auto indices = mergeIndices(position_indices, orientation_indices, position1->size());
+
+  //populatePartialMeasurement(
+  //    pose_relative_mean,
+  //    pose_relative_covariance,
+  //    indices,
+  //    pose_relative_mean_partial,
+  //    pose_relative_covariance_partial);
+
+  if (validate) {
+    try {
+      validatePartialMeasurement(pose_relative_mean, pose_relative_covariance,
+                                 1e-6);
+    } catch (const std::runtime_error &ex) {
+      RCLCPP_ERROR_STREAM_THROTTLE(rclcpp::get_logger("fuse"),
+                                   sensor_proc_clock, 10.0 * 1000,
+                                   "Invalid differential pose measurement "
+                                   "using the twist covariance from '"
+                                       << source << "' source: " << ex.what());
+      return false;
+    }
+  }
+
+  // Create a relative pose constraint.
+  auto constraint = fuse_constraints::RelativePose3DStampedConstraint::make_shared(
+      source,
+      *position1,
+      *orientation1,
+      *position2,
+      *orientation2,
+      pose_relative_mean,
+      pose_relative_covariance);
 
   constraint->loss(loss);
 
@@ -1608,7 +1824,7 @@ inline bool processAccelWithCovariance(
   fuse_core::Transaction & transaction,
   const rclcpp::Duration & tf_timeout = rclcpp::Duration(0, 0))
 {
-  processAccel2DWithCovariance(source, device_id, acceleration, loss,
+  return processAccel2DWithCovariance(source, device_id, acceleration, loss,
                                target_frame, indices, tf_buffer, validate,
                                transaction, tf_timeout);
 }

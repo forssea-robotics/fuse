@@ -1380,7 +1380,7 @@ inline bool processTwistWithCovariance(
  * @param[out] transaction - The generated variables and constraints are added to this transaction
  * @return true if any constraints were added, false otherwise
  */
-inline bool processAccelWithCovariance(
+inline bool processAccel2DWithCovariance(
   const std::string & source,
   const fuse_core::UUID & device_id,
   const geometry_msgs::msg::AccelWithCovarianceStamped & acceleration,
@@ -1454,6 +1454,165 @@ inline bool processAccelWithCovariance(
   // Create the constraint
   auto linear_accel_constraint =
     fuse_constraints::AbsoluteAccelerationLinear2DStampedConstraint::make_shared(
+    source,
+    *acceleration_linear,
+    accel_mean_partial,
+    accel_covariance_partial,
+    indices);
+
+  linear_accel_constraint->loss(loss);
+
+  transaction.addVariable(acceleration_linear);
+  transaction.addConstraint(linear_accel_constraint);
+  transaction.addInvolvedStamp(acceleration.header.stamp);
+
+  return true;
+}
+
+/**
+ * @brief Extracts linear acceleration data from an AccelWithCovarianceStamped and adds that data to
+ *        a fuse Transaction
+ *
+ * This method effectively adds a linear acceleration variable and constraint to the given to the
+ * given \p transaction. The acceleration data is extracted from the \p acceleration message. Only
+ * 2D data is used. The data will be automatically transformed into the \p target_frame before it is
+ * used.
+ *
+ * @param[in] source - The name of the sensor or motion model that generated this constraint
+ * @param[in] device_id - The UUID of the machine
+ * @param[in] acceleration - The AccelWithCovarianceStamped message from which we will extract the
+ *                           acceleration data
+ * @param[in] loss - The loss function for the 2D linear acceleration constraint generated
+ * @param[in] target_frame - The frame ID into which the acceleration data will be transformed
+ *                           before it is used
+ * @param[in] tf_buffer - The transform buffer with which we will lookup the required transform
+ * @param[in] validate - Whether to validate the measurements or not. If the validation fails no
+ *                       constraint is added
+ * @param[out] transaction - The generated variables and constraints are added to this transaction
+ * @return true if any constraints were added, false otherwise
+ */
+[[deprecated("This method was renamed to processAccel2DWithCovariance. Please use the new one.")]]
+inline bool processAccelWithCovariance(
+  const std::string & source,
+  const fuse_core::UUID & device_id,
+  const geometry_msgs::msg::AccelWithCovarianceStamped & acceleration,
+  const fuse_core::Loss::SharedPtr & loss,
+  const std::string & target_frame,
+  const std::vector<size_t> & indices,
+  const tf2_ros::Buffer & tf_buffer,
+  const bool validate,
+  fuse_core::Transaction & transaction,
+  const rclcpp::Duration & tf_timeout = rclcpp::Duration(0, 0))
+{
+  processAccel2DWithCovariance(source, device_id, acceleration, loss,
+                               target_frame, indices, tf_buffer, validate,
+                               transaction, tf_timeout);
+}
+
+/**
+ * @brief Extracts linear acceleration data from an AccelWithCovarianceStamped and adds that data to
+ *        a fuse Transaction
+ *
+ * This method effectively adds a linear acceleration variable and constraint to the given to the
+ * given \p transaction. The acceleration data is extracted from the \p acceleration message. Full
+ * 3D data is used. The data will be automatically transformed into the \p target_frame before it is
+ * used.
+ *
+ * @param[in] source - The name of the sensor or motion model that generated this constraint
+ * @param[in] device_id - The UUID of the machine
+ * @param[in] acceleration - The AccelWithCovarianceStamped message from which we will extract the
+ *                           acceleration data
+ * @param[in] loss - The loss function for the 3D linear acceleration constraint generated
+ * @param[in] target_frame - The frame ID into which the acceleration data will be transformed
+ *                           before it is used
+ * @param[in] tf_buffer - The transform buffer with which we will lookup the required transform
+ * @param[in] validate - Whether to validate the measurements or not. If the validation fails no
+ *                       constraint is added
+ * @param[out] transaction - The generated variables and constraints are added to this transaction
+ * @return true if any constraints were added, false otherwise
+ */
+inline bool processAccel3DWithCovariance(
+  const std::string & source,
+  const fuse_core::UUID & device_id,
+  const geometry_msgs::msg::AccelWithCovarianceStamped & acceleration,
+  const fuse_core::Loss::SharedPtr & loss,
+  const std::string & target_frame,
+  const std::vector<size_t> & indices,
+  const tf2_ros::Buffer & tf_buffer,
+  const bool validate,
+  fuse_core::Transaction & transaction,
+  const rclcpp::Duration & tf_timeout = rclcpp::Duration(0, 0))
+{
+  // Make sure we actually have work to do
+  if (indices.empty()) {
+    return false;
+  }
+
+  geometry_msgs::msg::AccelWithCovarianceStamped transformed_message;
+  if (target_frame.empty()) {
+    transformed_message = acceleration;
+  } else {
+    transformed_message.header.frame_id = target_frame;
+
+    if (!transformMessage(tf_buffer, acceleration, transformed_message, tf_timeout)) {
+      RCLCPP_WARN_STREAM_SKIPFIRST_THROTTLE(
+        rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0,
+        "Failed to transform acceleration message with stamp " <<
+          rclcpp::Time(acceleration.header.stamp).nanoseconds()
+                                                               << ". Cannot create constraint.");
+      return false;
+    }
+  }
+
+  // Create the acceleration variables
+  auto acceleration_linear =
+    fuse_variables::AccelerationLinear3DStamped::make_shared(acceleration.header.stamp, device_id);
+  acceleration_linear->x() = transformed_message.accel.accel.linear.x;
+  acceleration_linear->y() = transformed_message.accel.accel.linear.y;
+  acceleration_linear->z() = transformed_message.accel.accel.linear.z;
+
+  // Create the full mean vector and covariance for the constraint
+  fuse_core::Vector3d accel_mean;
+  accel_mean << transformed_message.accel.accel.linear.x,
+      transformed_message.accel.accel.linear.y,
+      transformed_message.accel.accel.linear.z;
+
+  fuse_core::Matrix3d accel_covariance;
+  accel_covariance <<
+    transformed_message.accel.covariance[0],
+    transformed_message.accel.covariance[1],
+    transformed_message.accel.covariance[2],
+    transformed_message.accel.covariance[6],
+    transformed_message.accel.covariance[7],
+    transformed_message.accel.covariance[8],
+    transformed_message.accel.covariance[12],
+    transformed_message.accel.covariance[13],
+    transformed_message.accel.covariance[14];
+
+  // Build the sub-vector and sub-matrices based on the requested indices
+  fuse_core::VectorXd accel_mean_partial(indices.size());
+  fuse_core::MatrixXd accel_covariance_partial(accel_mean_partial.rows(),
+    accel_mean_partial.rows());
+
+  populatePartialMeasurement(
+    accel_mean, accel_covariance, indices, accel_mean_partial,
+    accel_covariance_partial);
+
+  if (validate) {
+    try {
+      validatePartialMeasurement(accel_mean_partial, accel_covariance_partial);
+    } catch (const std::runtime_error & ex) {
+      RCLCPP_ERROR_STREAM_THROTTLE(
+        rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0 * 1000,
+        "Invalid partial linear acceleration measurement from '"
+          << source << "' source: " << ex.what());
+      return false;
+    }
+  }
+
+  // Create the constraint
+  auto linear_accel_constraint =
+    fuse_constraints::AbsoluteAccelerationLinear3DStampedConstraint::make_shared(
     source,
     *acceleration_linear,
     accel_mean_partial,

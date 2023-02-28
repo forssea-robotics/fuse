@@ -48,6 +48,7 @@
 #include <fuse_constraints/absolute_pose_2d_stamped_constraint.hpp>
 #include <fuse_constraints/relative_pose_2d_stamped_constraint.hpp>
 #include <fuse_constraints/absolute_constraint.hpp>
+#include <fuse_constraints/absolute_orientation_3d_stamped_constraint.hpp>
 #include <fuse_core/eigen.hpp>
 #include <fuse_core/loss.hpp>
 #include <fuse_core/transaction.hpp>
@@ -380,6 +381,109 @@ inline bool processAbsolutePoseWithCovariance(
   constraint->loss(loss);
 
   transaction.addVariable(position);
+  transaction.addVariable(orientation);
+  transaction.addConstraint(constraint);
+  transaction.addInvolvedStamp(pose.header.stamp);
+
+  return true;
+}
+
+/**
+ * @brief Extracts 3D orientation data from a PoseWithCovarianceStamped message 
+ *        and adds that data to a fuse Transaction
+ *
+ * This method effectively adds one variable (3D orientation) constraint to the given 
+ * \p transaction. The orientation data is extracted from the \p pose message.
+ * Full 3D data is used. The data will be automatically transformed into the \p target_frame before it is
+ * used.
+ *
+ * @param[in] source - The name of the sensor or motion model that generated this constraint
+ * @param[in] device_id - The UUID of the machine
+ * @param[in] pose - The pose message from which we will extract the orientation and covariance data
+ * @param[in] loss - The loss function for the 3D orientation constraint generated
+ * @param[in] target_frame - The frame ID into which the orientation data will be transformed before it is
+ *                           used
+ * @param[in] tf_buffer - The transform buffer with which we will lookup the required transform
+ * @param[in] validate - Whether to validate the measurements or not. If the validation fails no
+ *                       constraint is added
+ * @param[out] transaction - The generated variables and constraints are added to this transaction
+ * @return true if any constraints were added, false otherwise
+ */
+inline bool processAbsoluteOrientation3DWithCovariance(
+  const std::string & source,
+  const fuse_core::UUID & device_id,
+  const geometry_msgs::msg::PoseWithCovarianceStamped & pose,
+  const fuse_core::Loss::SharedPtr & loss,
+  const std::string & target_frame,
+  const tf2_ros::Buffer & tf_buffer,
+  const bool validate,
+  fuse_core::Transaction & transaction,
+  const rclcpp::Duration & tf_timeout = rclcpp::Duration(0, 0))
+{
+  geometry_msgs::msg::PoseWithCovarianceStamped transformed_message;
+  if (target_frame.empty()) {
+    transformed_message = pose;
+  } else {
+    transformed_message.header.frame_id = target_frame;
+
+    if (!transformMessage(tf_buffer, pose, transformed_message, tf_timeout)) {
+      RCLCPP_WARN_STREAM_SKIPFIRST_THROTTLE(
+        rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0 * 1000,
+        "Failed to transform pose message with stamp " << rclcpp::Time(
+          pose.header.stamp).nanoseconds() << ". Cannot create constraint.");
+      return false;
+    }
+  }
+
+  // Create the pose variable
+  auto orientation = fuse_variables::Orientation3DStamped::make_shared(pose.header.stamp, device_id);
+  orientation->w() = transformed_message.pose.pose.orientation.w;
+  orientation->x() = transformed_message.pose.pose.orientation.x;
+  orientation->y() = transformed_message.pose.pose.orientation.y;
+  orientation->z() = transformed_message.pose.pose.orientation.z;
+
+  // Create the pose for the constraint
+  fuse_core::Vector4d orientation_mean;
+  orientation_mean << 
+    orientation->w(),
+    orientation->x(),
+    orientation->y(),
+    orientation->z();
+
+  // Create the covariance for the constraint
+  fuse_core::Matrix3d orientation_covariance;
+  orientation_covariance <<
+    transformed_message.pose.covariance[21],
+    transformed_message.pose.covariance[22],
+    transformed_message.pose.covariance[23],
+    transformed_message.pose.covariance[27],
+    transformed_message.pose.covariance[28],
+    transformed_message.pose.covariance[29],
+    transformed_message.pose.covariance[33],
+    transformed_message.pose.covariance[34],
+    transformed_message.pose.covariance[35];
+
+  if (validate) {
+    try {
+      validatePartialMeasurement(orientation_mean, orientation_covariance);
+    } catch (const std::runtime_error & ex) {
+      RCLCPP_ERROR_STREAM_THROTTLE(
+        rclcpp::get_logger("fuse"), sensor_proc_clock, 10.0 * 1000,
+        "Invalid absolute orientation measurement from '" << source
+                                                          << "' source: " << ex.what());
+      return false;
+    }
+  }
+
+  // Create an absolute pose constraint
+  auto constraint = fuse_constraints::AbsoluteOrientation3DStampedConstraint::make_shared(
+    source,
+      *orientation,
+    orientation_mean,
+    orientation_covariance);
+
+  constraint->loss(loss);
+
   transaction.addVariable(orientation);
   transaction.addConstraint(constraint);
   transaction.addInvolvedStamp(pose.header.stamp);

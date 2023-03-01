@@ -479,7 +479,7 @@ inline bool processAbsoluteOrientation3DWithCovariance(
   // Create an absolute pose constraint
   auto constraint = fuse_constraints::AbsoluteOrientation3DStampedConstraint::make_shared(
     source,
-      *orientation,
+    *orientation,
     orientation_mean,
     orientation_covariance);
 
@@ -960,7 +960,7 @@ inline bool processDifferentialPose3DWithCovariance(
 
   fuse_core::Vector7d pose_relative_mean;
   pose_relative_mean <<
-                     delta.getOrigin().x(),
+      delta.getOrigin().x(),
       delta.getOrigin().y(),
       delta.getOrigin().z(),
       delta.getRotation().w(),
@@ -1570,7 +1570,7 @@ inline bool processDifferentialPose3DWithTwistCovariance(
   //
   // J_t12 = dt * Id
   //
-  // where Id is a 3x3 Identity matrix.
+  // where Id is a 6x6 Identity matrix.
   //
   // In some cases the twist covariance T12 is very small and it could yield to an ill-conditioned
   // C12 covariance. For that reason a minimum covariance is added to [2].

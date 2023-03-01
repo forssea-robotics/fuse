@@ -43,6 +43,7 @@ add_library(${PROJECT_NAME}
   src/acceleration_2d.cpp
   src/graph_ignition.cpp
   src/imu_2d.cpp
+  src/imu_3d.cpp
   src/odometry_2d.cpp
   src/odometry_2d_publisher.cpp
   src/pose_2d.cpp

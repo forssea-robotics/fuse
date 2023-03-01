@@ -523,7 +523,7 @@ inline bool processAbsoluteOrientation3DWithCovariance(
  * @param[out] transaction - The generated variables and constraints are added to this transaction
  * @return true if any constraints were added, false otherwise
  */
-inline bool processDifferentialPoseWithCovariance(
+inline bool processDifferentialPose2DWithCovariance(
   const std::string & source,
   const fuse_core::UUID & device_id,
   const geometry_msgs::msg::PoseWithCovarianceStamped & pose1,
@@ -853,6 +853,27 @@ inline bool processDifferentialPoseWithCovariance(
   transaction.addInvolvedStamp(pose2.header.stamp);
 
   return true;
+}
+
+
+[[deprecated("this method was renamed to processDifferentialPose2DWithCovariance")]]
+inline bool processDifferentialPoseWithCovariance(
+    const std::string & source,
+    const fuse_core::UUID & device_id,
+    const geometry_msgs::msg::PoseWithCovarianceStamped & pose1,
+    const geometry_msgs::msg::PoseWithCovarianceStamped & pose2,
+    const bool independent,
+    const fuse_core::Matrix3d & minimum_pose_relative_covariance,
+    const fuse_core::Loss::SharedPtr & loss,
+    const std::vector<size_t> & position_indices,
+    const std::vector<size_t> & orientation_indices,
+    const bool validate,
+    fuse_core::Transaction & transaction)
+{
+  return processDifferentialPose2DWithCovariance(
+      source, device_id, pose1, pose2, independent,
+      minimum_pose_relative_covariance, loss, position_indices,
+      orientation_indices, validate, transaction);
 }
 
 /**

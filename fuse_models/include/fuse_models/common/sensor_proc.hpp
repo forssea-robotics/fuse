@@ -34,6 +34,7 @@
 #ifndef FUSE_MODELS__COMMON__SENSOR_PROC_HPP_
 #define FUSE_MODELS__COMMON__SENSOR_PROC_HPP_
 
+#include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2/LinearMath/Vector3.h>
 #include <tf2_ros/buffer.h>
@@ -135,6 +136,18 @@ void doTransform(
   t_out.accel.covariance = transformCovariance(t_in.accel.covariance, t);
 }
 
+void toEigen(const tf2::Matrix3x3& tf2_matrix_in, fuse_core::Matrix3d& eigen_matrix_out){
+  eigen_matrix_out <<
+      tf2_matrix_in[0][0], tf2_matrix_in[0][1], tf2_matrix_in[0][2],
+      tf2_matrix_in[1][0], tf2_matrix_in[1][1], tf2_matrix_in[1][2],
+      tf2_matrix_in[2][0], tf2_matrix_in[2][1], tf2_matrix_in[2][2];
+}
+
+fuse_core::Matrix3d toEigen(const tf2::Matrix3x3& tf2_matrix_in){
+  fuse_core::Matrix3d eigen_matrix;
+  toEigen(tf2_matrix_in, eigen_matrix);
+  return eigen_matrix;
+}
 }  // namespace tf2
 
 
@@ -605,17 +618,17 @@ inline bool processDifferentialPose2DWithCovariance(
     fuse_core::Matrix3d j_pose1;
     /* *INDENT-OFF* */
     j_pose1 <<
-      -cy,  sy,  sy * x_diff + cy * y_diff, // fixme it should be -cy, sy,  0
-      -sy, -cy, -cy * x_diff + sy * y_diff, // fixme              -sy, cy,  0
-        0,   0,                         -1; // fixme                0,  0, -1
+      -cy,  sy,  sy * x_diff + cy * y_diff,
+      -sy, -cy, -cy * x_diff + sy * y_diff,
+        0,   0,                         -1;
     /* *INDENT-ON* */
 
     fuse_core::Matrix3d j_pose2;
     /* *INDENT-OFF* */
     j_pose2 <<
-       cy, -sy,  0, // fixme: it should be cy, -sy, -sy * x_diff - cy * y_diff
-       sy,  cy,  0, // fixme               sy,  cy,  cy * x_diff - sy * y_diff
-        0,   0,  1; //                      0,   0,                          1
+       cy, -sy,  0,
+       sy,  cy,  0,
+        0,   0,  1;
     /* *INDENT-ON* */
 
     pose_relative_covariance = j_pose1 * cov1 * j_pose1.transpose() + j_pose2 * cov2 *
@@ -972,27 +985,38 @@ inline bool processDifferentialPose3DWithCovariance(
   fuse_core::Matrix6d cov1(pose1.pose.covariance.data());
   fuse_core::Matrix6d cov2(pose2.pose.covariance.data());
 
+  // create alias for readiness
+  tf2::Matrix3x3 r3(delta.getRotation());
+  tf2::Matrix3x3 r1 (pose1_3d.getRotation());
+  tf2::Matrix3x3 r2 (pose2_3d.getRotation());
+
+  /* *INDENT-OFF* */
+  tf2::Matrix3x3 sk1(
+      0                        , -pose1_3d.getOrigin().z(),  pose1_3d.getOrigin().y(),
+       pose1_3d.getOrigin().z(),                         0, -pose1_3d.getOrigin().x(),
+      -pose1_3d.getOrigin().y(),  pose1_3d.getOrigin().x(),                         0
+  );
+  tf2::Matrix3x3 sk3(
+      0                     , -delta.getOrigin().z(),  delta.getOrigin().y(),
+       delta.getOrigin().z(),                      0, -delta.getOrigin().x(),
+      -delta.getOrigin().y(),  delta.getOrigin().x(),                      0
+      );
+  /* *INDENT-ON* */
+
   fuse_core::Matrix6d pose_relative_covariance;
   if (independent) {
     // Compute Jacobians so we can rotate the covariance
     fuse_core::Matrix6d j_pose1;
     /* *INDENT-OFF* */
-    j_pose1 = fuse_core::Matrix6d::Identity();
-    // TODO(ejalaa) compute the jacobian
-    //j_pose1 <<
-    //    -cy,  sy,  sy * x_diff + cy * y_diff,
-    //    -sy, -cy, -cy * x_diff + sy * y_diff,
-    //    0,   0,                         -1;
+    j_pose1 = fuse_core::Matrix6d::Zero();
+    j_pose1.block<3, 3>(0, 0) = - tf2::toEigen(r3.transpose());
+    j_pose1.block<3, 3>(2, 2) = - tf2::toEigen(r3.transpose());
+    j_pose1.block<3, 3>(0, 2) = tf2::toEigen(r3.transpose() * sk3);
     /* *INDENT-ON* */
 
     fuse_core::Matrix6d j_pose2;
     /* *INDENT-OFF* */
-    // TODO(ejalaa) compute the jacobian
     j_pose2 = fuse_core::Matrix6d::Identity();
-    //j_pose2 <<
-    //    cy, -sy,  0,
-    //    sy,  cy,  0,
-    //    0,   0,  1;
     /* *INDENT-ON* */
 
     pose_relative_covariance = j_pose1 * cov1 * j_pose1.transpose() + j_pose2 * cov2 *
@@ -1162,19 +1186,15 @@ inline bool processDifferentialPose3DWithCovariance(
     fuse_core::Matrix6d j_pose1;
     /* *INDENT-OFF* */
     // TODO(ejalaa) compute the jacobian
-    j_pose1 = fuse_core::Matrix6d::Identity();
-    //j_pose1 << 1, 0, sy * pose_relative_mean(0) - cy * pose_relative_mean(1),
-    //    0, 1, cy * pose_relative_mean(0) + sy * pose_relative_mean(1),
-    //    0, 0, 1;
+    j_pose1 = fuse_core::Matrix6d::Zero();
+    j_pose1.block<3, 3>(0, 0) = tf2::toEigen(r1.transpose());
+    j_pose1.block<3, 3>(0, 2) = - tf2::toEigen(r1.transpose() * sk1);
+    j_pose1.block<3, 3>(2, 2) = tf2::toEigen(r1.transpose());
     /* *INDENT-ON* */
 
     fuse_core::Matrix6d j_pose12_inv;
     /* *INDENT-OFF* */
-    // TODO(ejalaa) compute the jacobian
     j_pose12_inv = fuse_core::Matrix6d::Identity();
-    //j_pose12_inv << cy, -sy, 0,
-    //    sy,  cy, 0,
-    //    0,   0, 1;
     /* *INDENT-ON* */
 
     pose_relative_covariance = j_pose12_inv * (cov2 - j_pose1 * cov1 * j_pose1.transpose()) *
@@ -1593,21 +1613,6 @@ inline bool processDifferentialPose3DWithTwistCovariance(
   fuse_core::Matrix6d pose_relative_covariance =
       j_twist * (cov - twist_covariance_offset) * j_twist.transpose() +
           minimum_pose_relative_covariance;
-
-  //// Build the sub-vector and sub-matrices based on the requested indices
-  //fuse_core::VectorXd pose_relative_mean_partial(
-  //    position_indices.size() + orientation_indices.size());
-  //fuse_core::MatrixXd pose_relative_covariance_partial(pose_relative_mean_partial.rows(),
-  //                                                     pose_relative_mean_partial.rows());
-  //
-  //const auto indices = mergeIndices(position_indices, orientation_indices, position1->size());
-
-  //populatePartialMeasurement(
-  //    pose_relative_mean,
-  //    pose_relative_covariance,
-  //    indices,
-  //    pose_relative_mean_partial,
-  //    pose_relative_covariance_partial);
 
   if (validate) {
     try {

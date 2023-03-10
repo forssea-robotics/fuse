@@ -136,14 +136,14 @@ void doTransform(
   t_out.accel.covariance = transformCovariance(t_in.accel.covariance, t);
 }
 
-void toEigen(const tf2::Matrix3x3& tf2_matrix_in, fuse_core::Matrix3d& eigen_matrix_out){
+inline void toEigen(const tf2::Matrix3x3& tf2_matrix_in, fuse_core::Matrix3d& eigen_matrix_out){
   eigen_matrix_out <<
       tf2_matrix_in[0][0], tf2_matrix_in[0][1], tf2_matrix_in[0][2],
       tf2_matrix_in[1][0], tf2_matrix_in[1][1], tf2_matrix_in[1][2],
       tf2_matrix_in[2][0], tf2_matrix_in[2][1], tf2_matrix_in[2][2];
 }
 
-fuse_core::Matrix3d toEigen(const tf2::Matrix3x3& tf2_matrix_in){
+inline fuse_core::Matrix3d toEigen(const tf2::Matrix3x3& tf2_matrix_in){
   fuse_core::Matrix3d eigen_matrix;
   toEigen(tf2_matrix_in, eigen_matrix);
   return eigen_matrix;

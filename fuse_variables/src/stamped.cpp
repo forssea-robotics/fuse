@@ -42,19 +42,23 @@ namespace fuse_variables
 {
 
 fuse_core::UUID loadDeviceId(
-  fuse_core::node_interfaces::NodeInterfaces<fuse_core::node_interfaces::Parameters> interfaces)
+  fuse_core::node_interfaces::NodeInterfaces<fuse_core::node_interfaces::Parameters> interfaces, const std::string& ns)
 {
   std::string device_str;
 
-  device_str = fuse_core::getParam(interfaces, "device_id", std::string());
+  device_str = fuse_core::getParam(interfaces, fuse_core::joinParameterName(ns, "device_id"), std::string());
   if (!device_str.empty()) {
     return fuse_core::uuid::from_string(device_str);
   }
 
-  device_str = fuse_core::getParam(interfaces, "device_name", std::string());
+  device_str = fuse_core::getParam(interfaces, fuse_core::joinParameterName(ns, "device_name"), std::string());
   if (!device_str.empty()) {
     return fuse_core::uuid::generate(device_str);
   }
+
+  std::cout << "\033[91m"
+          << "[ERROR] loadDeviceId can not create a device_id. Wrongly set to fuse_core::uuid::NIL. Is namespace correctly configured?"
+          << "\033[0m\n";
 
   return fuse_core::uuid::NIL;
 }

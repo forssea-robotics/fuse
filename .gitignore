@@ -33,3 +33,6 @@
 
 # Python compiled bytecode files
 *.pyc
+
+# IDE 
+.vscode/

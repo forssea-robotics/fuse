@@ -42,6 +42,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <fstream> 
 
 #include <fuse_core/constraint.hpp>
 #include <fuse_core/graph.hpp>
@@ -389,6 +390,11 @@ public:
    * @param[out] stream The stream to write to. Defaults to stdout.
    */
   void print(std::ostream & stream = std::cout) const override;
+
+  /**
+   * @brief Create a graphviz (.dot) file to get a visual description of the graph. 
+   */
+  void graphviz(std::string output_path ="./graph.dot") const override;
 
 protected:
   // Define some helpful typedefs

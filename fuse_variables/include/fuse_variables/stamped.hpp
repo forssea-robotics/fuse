@@ -134,7 +134,7 @@ private:
  * @return                A device UUID
  */
 fuse_core::UUID loadDeviceId(
-  fuse_core::node_interfaces::NodeInterfaces<fuse_core::node_interfaces::Parameters> interfaces);
+  fuse_core::node_interfaces::NodeInterfaces<fuse_core::node_interfaces::Parameters> interfaces, const std::string& ns = "");
 
 }  // namespace fuse_variables
 

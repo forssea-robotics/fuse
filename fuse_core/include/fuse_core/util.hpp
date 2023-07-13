@@ -167,8 +167,8 @@ std::string joinTopicName(std::string a, std::string b)
     return a;
   }
   if (b.front() == '/' || b.front() == '~') {
-    RCLCPP_WARN(
-      rclcpp::get_logger("fuse"), "Second argument to joinTopicName is absolute! Returning it.");
+    RCLCPP_WARN_STREAM(
+      rclcpp::get_logger("fuse"), "Second argument (" << b << ") to joinTopicName is absolute! Returning it.");
     return b;
   }
 

@@ -477,8 +477,6 @@ void HashGraph::print(std::ostream & stream) const
   }
 }
 
-
-
 void HashGraph::graphviz(std::string output) const
 {
   std::fstream graph_dot;

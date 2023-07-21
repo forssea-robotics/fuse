@@ -57,8 +57,10 @@ fuse_core::UUID loadDeviceId(
   }
 
   std::cout << "\033[91m"
-          << "[ERROR] loadDeviceId can not create a device_id. Wrongly set to fuse_core::uuid::NIL. Is namespace correctly configured?"
-          << "\033[0m\n";
+            << "[ERROR] loadDeviceId can not create a device_id. Wrongly set "
+               "to fuse_core::uuid::NIL. Is namespace (ns='"
+            << ns << "') correctly configured?"
+            << "\033[0m\n";
 
   return fuse_core::uuid::NIL;
 }

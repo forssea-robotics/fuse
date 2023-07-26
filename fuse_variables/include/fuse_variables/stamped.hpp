@@ -133,8 +133,12 @@ private:
  * @param[in] interfaces  The node interfaces used to load parameters
  * @return                A device UUID
  */
-fuse_core::UUID loadDeviceId(
-  fuse_core::node_interfaces::NodeInterfaces<fuse_core::node_interfaces::Parameters> interfaces, const std::string& ns = "");
+fuse_core::UUID loadDeviceId(fuse_core::node_interfaces::NodeInterfaces<
+                                 fuse_core::node_interfaces::Parameters>
+                                 interfaces,
+                             const std::string &ns = "",
+                             const std::string &prefix = "",
+                             const std::string &suffix = "");
 
 }  // namespace fuse_variables
 

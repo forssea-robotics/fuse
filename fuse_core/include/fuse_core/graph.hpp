@@ -467,7 +467,7 @@ public:
   /**
    * @brief Create a graphviz (.dot) file to get a visual description of the graph. 
    */
-  virtual void graphviz(std::string output_path) const = 0;
+  virtual void graphviz(const std::string & output_path) const = 0;
 
   /**
    * @brief Serialize this graph into the provided binary archive

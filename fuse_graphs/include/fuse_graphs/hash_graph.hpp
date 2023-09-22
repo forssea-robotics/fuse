@@ -394,7 +394,7 @@ public:
   /**
    * @brief Create a graphviz (.dot) file to get a visual description of the graph. 
    */
-  void graphviz(std::string output_path ="./graph.dot") const override;
+  void graphviz(const std::string & output_path = "./graph.dot") const override;
 
 protected:
   // Define some helpful typedefs
